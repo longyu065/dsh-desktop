@@ -24,6 +24,8 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
+      "identity": null,
+      "hardenedRuntime": false,
       "target": [
         "dmg",
         "zip"
