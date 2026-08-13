@@ -92,6 +92,38 @@ function findNpm() {
   return null;
 }
 
+// 解析 node 可执行文件真实路径（打包 app 从 Finder 启动时 PATH 精简，找不到 node）
+function resolveNodeBin() {
+  if (process.env.DSH_NODE_BIN) return process.env.DSH_NODE_BIN;
+  const which = spawnSync('sh', ['-lc', 'command -v node'], { encoding: 'utf8' });
+  if (which.status === 0 && which.stdout.trim()) return which.stdout.trim();
+  const common = [
+    path.join(os.homedir(), '.local', 'bin', 'node'),
+    '/opt/homebrew/bin/node',
+    '/usr/local/bin/node',
+    '/usr/bin/node',
+  ];
+  for (const p of common) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+// 构造 spawn 环境：把 node 目录和常见 bin 目录注入 PATH，
+// 保证 dsh 的 `#!/usr/bin/env node` shebang 在 GUI 精简 PATH 下也能找到 node。
+function buildSpawnEnv(port) {
+  const nodeBin = resolveNodeBin();
+  const extraDirs = [
+    nodeBin ? path.dirname(nodeBin) : null,
+    path.join(os.homedir(), '.local', 'bin'),
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin',
+  ].filter(Boolean);
+  const PATH = [...new Set([...extraDirs, process.env.PATH || ''])].filter(Boolean).join(':');
+  return { ...process.env, PATH, PORT: String(port) };
+}
+
 // 确保 dsh 可用：有则返回其路径；没有则自动安装到工程内 vendor/dsh 并返回路径。
 // 自动安装不污染全局、不依赖用户 PATH，首次启动多花一两分钟。
 function ensureDshBin() {
@@ -123,19 +155,34 @@ function ensureDshBin() {
 // 拉起常驻的 dsh web（detached + unref，不随调用方退出），返回子进程。
 // 日志落盘 logs/dsh-web.{stdout,stderr}.log，pid 写入 logs/dsh-web.pid。
 // 找不到 dsh 时自动安装（见 ensureDshBin），仍失败则抛出带指引的错误。
+// 关键：用显式 node 路径执行 dsh（绕开 shebang 对 PATH 的依赖，打包 app 的
+// Finder 环境 PATH 精简找不到 node），并注入完整 PATH 供 dsh 内部子进程使用。
 function spawnDshServer(port) {
   const logDir = getLogDir();
   const outFd = fs.openSync(path.join(logDir, 'dsh-web.stdout.log'), 'a');
   const errFd = fs.openSync(path.join(logDir, 'dsh-web.stderr.log'), 'a');
   const dshCmd = ensureDshBin();
-  console.log(`[dsh-server] 使用 dsh: ${dshCmd}`);
-  const proc = spawn(dshCmd, ['web'], {
+  const nodeBin = resolveNodeBin();
+  const env = buildSpawnEnv(port);
+
+  let cmd, args;
+  if (nodeBin) {
+    cmd = nodeBin;
+    args = [dshCmd, 'web'];
+    console.log(`[dsh-server] 使用 node ${nodeBin} 执行 dsh: ${dshCmd}`);
+  } else {
+    cmd = dshCmd;
+    args = ['web'];
+    console.log(`[dsh-server] 直接执行 dsh: ${dshCmd}（未找到 node，依赖 shebang）`);
+  }
+
+  const proc = spawn(cmd, args, {
     detached: true,
     stdio: ['ignore', outFd, errFd],
-    env: { ...process.env, PORT: String(port) },
+    env,
   });
   proc.on('error', (err) => {
-    console.error(`[dsh-server] 无法启动 ${dshCmd}: ${err.message}`);
+    console.error(`[dsh-server] 无法启动 ${cmd}: ${err.message}`);
   });
   try {
     fs.writeFileSync(path.join(logDir, 'dsh-web.pid'), String(proc.pid));
@@ -247,5 +294,7 @@ module.exports = {
   findPidsOnPort,
   resolveDshBin,
   ensureDshBin,
+  resolveNodeBin,
+  buildSpawnEnv,
   getLogDir,
 };
