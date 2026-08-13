@@ -2,80 +2,86 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/longyu065/dsh-desktop/releases/tag/v0.1.0)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)]()
 [![Electron](https://img.shields.io/badge/Electron-43-47848F.svg)]()
 
-把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI（`dsh web`，本地 `127.0.0.1:3080`）包装成 macOS 桌面应用（Electron 壳）。
-**开箱即用**：拿过去只要 `npm install && npm start`，无需预装 dsh——没有会自动安装。
+**English** | [中文](README.zh.md)
+
+A desktop shell (Electron) for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI (`dsh web`, served at `127.0.0.1:3080` by default).
+**Zero-config**: clone it, run `npm install && npm start` — if `dsh` isn't installed, the app installs it for you.
 
 ## Features
 
-- 🚀 **开箱即用**：自动定位/安装 `dsh`（`@deepseek-ai/dsh`），无需任何前置配置
-- 🖥️ **原生桌面体验**：独立窗口 + macOS 菜单栏托盘（点红点隐藏、托盘显示/隐藏/退出）
-- 🔄 **智能服务管理**：复用已有 `dsh web` 实例；没有则自动拉起常驻服务，退出应用不中断
-- 🐋 **DeepSeek 官方图标**：应用图标与托盘图标均为官方鲸鱼标识
-- 📦 **一键打包**：electron-builder 产出 `.app` / dmg / zip
+- 🚀 **Zero-config startup** — auto-locates or auto-installs `dsh` (`@deepseek-ai/dsh`); no prerequisites beyond Node.js
+- 🖥️ **Native desktop experience** — standalone window + macOS menu-bar tray (hide-to-tray on close; show/hide/quit from the tray)
+- 🔄 **Smart server management** — reuses an existing `dsh web` instance; spawns a resident server when none is running; keeps it alive after the app quits
+- 🐋 **Official DeepSeek icon** — app and tray icons use the official whale mark
+- 📦 **One-command packaging** — electron-builder produces `.app` / dmg / zip for macOS and an NSIS installer + zip for Windows
 
-## 原理
+## How it works
 
-- `npm start` 先执行 `scripts/ensure-dsh.js`：
-  1. **定位 dsh**（`resolveDshBin`，顺序）：`DSH_BIN` 环境变量 → PATH 中的 `dsh` →
-     `~/.npm/_npx/*/node_modules/.bin/dsh` → 常见安装位置 → 工程内 `vendor/dsh`；
-  2. **没有 dsh → 自动安装**（`ensureDshBin`）：`npm install --prefix vendor/dsh @deepseek-ai/dsh`，
-     装进工程内 `vendor/`，不污染全局、不依赖用户 PATH（首次约 1-2 分钟）；
-  3. 探测 `127.0.0.1:3080`——已有实例（命令行/本 GUI 启动的）→ "直接复用"；
-     没有 → `spawn(dsh, ['web'])` 拉起**常驻**服务（detached，日志落 `logs/`），轮询就绪后启动 Electron。
-- Electron 只当客户端：加载页面、托盘常驻（点红点隐藏，托盘菜单显示/隐藏/退出）。
-- **退出 Electron 不杀 dsh web**——服务常驻，下次 `npm start` 秒级复用。
-  需要停服务：`pkill -f "dsh web"`。
-- 直接 `electron .`（`npm run start:raw`，跳过前置脚本）时，主进程也会兜底定位/安装/拉起。
+`npm start` first runs `scripts/ensure-dsh.js`:
 
-## 开发运行
+1. **Locate `dsh`** (`resolveDshBin`, in order): `DSH_BIN` env var → `dsh` on `PATH` → `~/.npm/_npx/*/node_modules/.bin/dsh` → common install locations → project-local `vendor/dsh`
+2. **No `dsh`? Auto-install** (`ensureDshBin`): runs `npm install --prefix vendor/dsh @deepseek-ai/dsh` into the project — no global install, no dependence on the user's `PATH` (first run takes ~1–2 min)
+3. **Probe `127.0.0.1:3080`** — an existing instance (started by CLI or this app) is reused; otherwise a **resident** server is spawned (`detached`, logs to `logs/`) and the app waits until the port is ready before opening the window.
+
+The Electron process is a pure client: it loads the page and owns the tray. Quitting the app does **not** kill `dsh web` — the server stays resident so the next `npm start` opens instantly. Stop it with `pkill -f "dsh web"`.
+
+Running `electron .` directly (`npm run start:raw`, skipping the preflight) still triggers the same locate/install/spawn fallback from the main process.
+
+## Getting started
 
 ```bash
 cd dsh-desktop
-npm install        # 安装 electron（含二进制下载）
-npm start          # 自动定位/安装 dsh → 确保服务在跑 → 打开桌面应用
+npm install        # installs Electron (downloads binary)
+npm start          # locate/install dsh → ensure server → open the app
 ```
 
-> 手动指定 dsh：`DSH_BIN=/path/to/dsh npm start`。安装日志在 `vendor/dsh` 安装时的终端输出，
-> 运行日志在 `logs/dsh-web.{stdout,stderr}.log`。
+> Pin a specific dsh binary: `DSH_BIN=/path/to/dsh npm start`.
+> Install output goes to your terminal during `vendor/dsh` setup; runtime logs live in `logs/dsh-web.{stdout,stderr}.log`.
 
-### 安装时的两个环境变通点（本机曾遇到）
+### Known environment quirks (seen on some machines)
 
-1. `~/.npm` 缓存目录被 root 占用会导致 `npm install` 报 `EPERM`。临时方案：
-   `npm install --cache /Users/tiankunrui/Documents/.npm-cache-dsh`
-2. Electron 二进制下载默认写 `~/Library/Caches/electron`，若不可写，用
-   `electron_config_cache` 指定替代缓存目录（install.js 读取的是这个变量，不是 `ELECTRON_CACHE`）：
+1. `~/.npm` cache owned by root breaks `npm install` with `EPERM`. Workaround:
+   `npm install --cache /path/to/writable/npm-cache`
+2. Electron's binary download writes to `~/Library/Caches/electron` by default; if that's not writable, point it elsewhere with
+   `electron_config_cache` (note: this is the variable `install.js` reads — not `ELECTRON_CACHE`):
    `electron_config_cache=/path/to/.electron-cache node node_modules/electron/install.js`
 
-日常 `npm start` 在正常终端环境下无需这些变通。
+None of these matter for a normal `npm start`.
 
-## 打包为 .app / dmg
+## Packaging
 
 ```bash
-npm run dist       # 基于 electron-builder，产物在 release/
+npm run dist        # macOS: dmg + zip
+npm run dist:win    # Windows: NSIS installer + zip (cross-compile from macOS)
+npm run dist:all    # both
 ```
 
-打包说明：
+Notes:
 
-- 开发/日常使用直接 `npm start` 即可；
-- 发布版打包时**不包含** `vendor/dsh`（体积大），目标机器首次 `npm start` 会自动安装。
-  如需完全离线自包含，可发布前把 `vendor/dsh` 一并打进 `extraResources`，并在主进程按
-  `process.resourcesPath` 解析后传给 `DSH_BIN`。
+- For everyday use just `npm start`.
+- Released builds do **not** bundle `vendor/dsh` (it's large); the target machine auto-installs it on first `npm start`.
+  For a fully offline, self-contained build, ship `vendor/dsh` via `extraResources` and point `DSH_BIN` at `process.resourcesPath` in the main process.
 
-## 目录结构
+## Project layout
 
 ```
 dsh-desktop/
-├── package.json        # electron 依赖 + start/dist 脚本 + 打包配置
+├── package.json          # deps, start/dist scripts, build config
 ├── scripts/
-│   ├── ensure-dsh.js   # start 前置：定位/安装 dsh → 探测 3080 → 无则拉起常驻服务
-│   └── dsh-server-lib.js # 公共逻辑：dsh 定位/自动安装 / 端口探测 / 等待就绪 / 拉起
+│   ├── ensure-dsh.js     # preflight: locate/install dsh → probe 3080 → spawn resident server
+│   └── dsh-server-lib.js # shared logic: dsh locate/install, port probe, readiness wait, spawn
 ├── electron/
-│   ├── main.js         # 主进程：兜底定位/安装/拉起、窗口、托盘（不管理服务生命周期）
-│   └── preload.js      # 最小预加载桥（只读版本信息）
-├── vendor/dsh/         # 自动安装的 dsh（首次 start 生成，可删，下次会自动重装）
-├── logs/               # dsh web 运行日志与 pid（运行时生成）
-└── release/            # 打包产物（electron-builder 输出）
+│   ├── main.js           # main process: fallback locate/install/spawn, window, tray
+│   └── preload.js        # minimal preload bridge (read-only version info)
+├── vendor/dsh/           # auto-installed dsh (created on first start; safe to delete)
+├── logs/                 # dsh web logs & pid (runtime)
+├── build/                # app icons (icon.icns, icon.ico, icon.png)
+└── release/              # packaging output (electron-builder)
 ```
+
+## License
+
+[MIT](LICENSE) © 2026 tiankunrui
