@@ -104,6 +104,10 @@ function createTray() {
 
 // ---------- 生命周期 ----------
 app.whenReady().then(async () => {
+  // 打包后 __dirname 在只读的 asar 内，日志/pid 必须落到 userData 可写目录
+  if (app.isPackaged) {
+    process.env.DSH_DESKTOP_DATA_DIR = app.getPath('userData');
+  }
   await ensureDshServer();
   createWindow();
   createTray();
@@ -121,11 +125,11 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (e) => {
   app.isQuiting = true;
-  // 结束本应用拉起的 dsh web 服务（异步，需等待完成后真正退出）
+  // 结束 dsh web 服务（本应用拉起的 + 监听 3080 的外部实例），异步等待完成后真正退出
   if (!app._dshStopping) {
     app._dshStopping = true;
     e.preventDefault();
-    stopDshServer()
+    stopDshServer(PORT)
       .catch(() => {})
       .finally(() => {
         app.quit();

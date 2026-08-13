@@ -10,9 +10,11 @@ const DEFAULT_PORT = 3080;
 const POLL_ATTEMPTS = 60;   // 最多等 60 秒
 const POLL_INTERVAL = 1000; // 每秒探测一次
 
-// 日志目录：工程下 logs/（当前工作区可写，避免依赖 ~/Library 权限）
+// 日志目录：优先 DSH_DESKTOP_DATA_DIR（打包后指向 app userData，可写），
+// 否则退回工程下 logs/（开发模式，当前工作区可写）。
 function getLogDir() {
-  const dir = path.join(__dirname, '..', 'logs');
+  const base = process.env.DSH_DESKTOP_DATA_DIR || path.join(__dirname, '..');
+  const dir = path.join(base, 'logs');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -155,43 +157,82 @@ function isDshProcess(pid) {
   }
 }
 
-// 结束本应用拉起的 dsh web 服务（应用退出时调用）。
-// 只结束 logs/dsh-web.pid 记录的进程；复用的外部实例不受影响。
-// 返回 true 表示已结束（或本就没有自拉起的服务），false 表示进程仍存活。
-async function stopDshServer(timeoutMs = 4000) {
-  const pidFile = path.join(getLogDir(), 'dsh-web.pid');
-  let pid = null;
+// 找出监听指定端口的进程 pid 列表（macOS/Linux 用 lsof，Windows 用 netstat）
+function findPidsOnPort(port) {
   try {
-    pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
-  } catch (_) {}
-  try { fs.unlinkSync(pidFile); } catch (_) {}
-
-  if (!pid || !Number.isFinite(pid) || pid <= 0) {
-    console.log('[dsh-server] 无本应用拉起的 dsh web 记录（可能复用了外部实例），跳过停止');
-    return true;
+    if (process.platform === 'win32') {
+      const out = spawnSync('netstat', ['-ano'], { encoding: 'utf8' });
+      if (out.status !== 0) return [];
+      const pids = new Set();
+      for (const line of out.stdout.split('\n')) {
+        if (line.includes(`:${port}`) && /LISTENING|ESTABLISHED/.test(line)) {
+          const pid = line.trim().split(/\s+/).pop();
+          if (/^\d+$/.test(pid)) pids.add(Number(pid));
+        }
+      }
+      return [...pids];
+    }
+    const out = spawnSync('lsof', ['-ti', `tcp:${port}`], { encoding: 'utf8' });
+    if (out.status !== 0) return [];
+    return out.stdout
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => /^\d+$/.test(s))
+      .map(Number);
+  } catch (_) {
+    return [];
   }
-  if (!isDshProcess(pid)) {
-    console.log(`[dsh-server] pid ${pid} 不是 dsh 进程，跳过停止（可能已被系统回收）`);
-    return true;
-  }
+}
 
-  console.log(`[dsh-server] 应用退出，正在结束 dsh web (pid=${pid}) ...`);
-  try { process.kill(pid, 'SIGTERM'); } catch (_) {}
-
+// 结束单个进程：SIGTERM 优雅退出，超时后 SIGKILL
+async function killProcess(pid, timeoutMs) {
+  try { process.kill(pid, 'SIGTERM'); } catch (_) { return; }
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       process.kill(pid, 0); // 存活则继续等
       await new Promise((r) => setTimeout(r, 200));
     } catch (_) {
-      console.log('[dsh-server] ✅ dsh web 已结束');
-      return true;
+      return; // 已退出
     }
   }
+  try { process.kill(pid, 'SIGKILL'); } catch (_) {}
+}
+
+// 结束 dsh web 服务（应用退出时调用）。
+// 覆盖两类进程：① logs/dsh-web.pid 记录的（本应用拉起的）；② 当前监听目标端口的 dsh 进程
+// （复用的外部实例也会被结束，保证关掉应用后 3080 不再可访问）。
+async function stopDshServer(port = DEFAULT_PORT, timeoutMs = 4000) {
+  const stopped = new Set();
+
+  // ① pid 文件记录的（本应用拉起的）
+  const pidFile = path.join(getLogDir(), 'dsh-web.pid');
+  let pid = null;
   try {
-    process.kill(pid, 'SIGKILL');
-    console.log('[dsh-server] dsh web 未在限时内退出，已 SIGKILL');
+    pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
   } catch (_) {}
+  try { fs.unlinkSync(pidFile); } catch (_) {}
+  if (pid && Number.isFinite(pid) && pid > 0 && isDshProcess(pid)) {
+    console.log(`[dsh-server] 应用退出，结束本应用拉起的 dsh web (pid=${pid}) ...`);
+    await killProcess(pid, timeoutMs);
+    stopped.add(pid);
+  }
+
+  // ② 监听目标端口的 dsh 进程（含复用的外部实例）
+  const portPids = findPidsOnPort(port);
+  for (const ppid of portPids) {
+    if (stopped.has(ppid)) continue;
+    if (!isDshProcess(ppid)) continue; // 非 dsh 进程不误杀
+    console.log(`[dsh-server] 应用退出，结束监听端口 ${port} 的 dsh web (pid=${ppid}) ...`);
+    await killProcess(ppid, timeoutMs);
+    stopped.add(ppid);
+  }
+
+  if (stopped.size === 0) {
+    console.log('[dsh-server] 没有需要结束的 dsh web 进程（端口未被占用）');
+  } else {
+    console.log(`[dsh-server] ✅ 已结束 ${stopped.size} 个 dsh web 进程`);
+  }
   return true;
 }
 
@@ -203,6 +244,7 @@ module.exports = {
   waitForServer,
   spawnDshServer,
   stopDshServer,
+  findPidsOnPort,
   resolveDshBin,
   ensureDshBin,
   getLogDir,
