@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Added
+- Windows x64 打包支持（NSIS 安装包 + zip，`npm run dist:win`），含 DeepSeek 图标 .ico。
 - 自动安装 dsh 失败的场景下，提示手动 `npm i -g @deepseek-ai/dsh` 的指引。
 
 ## [0.1.0] - 2026-08-13
