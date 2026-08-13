@@ -1,9 +1,9 @@
 // DeepSeek Harness Web GUI 的 Electron 壳 —— 主进程
 // 服务生命周期约定：
 //   - npm start 会先跑 scripts/ensure-dsh.js：探测 127.0.0.1:3080，
-//     没有则拉起常驻的 dsh web 并等待就绪，再启动本应用；
-//   - 本进程只负责打开窗口加载页面，退出时【不】杀掉 dsh web
-//     （服务常驻，下次 start 直接复用；要停服务用 `pkill -f "dsh web"`）。
+//     没有则拉起 dsh web 并等待就绪，再启动本应用；
+//   - 本进程只负责打开窗口加载页面；**退出应用时结束本应用拉起的 dsh web**
+//     （通过 logs/dsh-web.pid 精确停止，复用的外部实例不受影响）。
 //   - 直接 `electron .`（跳过前置脚本）时，这里也会兜底探测并拉起。
 const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
@@ -12,6 +12,7 @@ const {
   probePort,
   waitForServer,
   spawnDshServer,
+  stopDshServer,
 } = require('../scripts/dsh-server-lib');
 
 const PORT = Number(process.env.DSH_DESKTOP_PORT || DEFAULT_PORT);
@@ -118,7 +119,16 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin' && app.isQuiting) app.quit();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
   app.isQuiting = true;
-  // 注意：不 kill dsh web —— 服务常驻，由 ensure-dsh.js 管理
+  // 结束本应用拉起的 dsh web 服务（异步，需等待完成后真正退出）
+  if (!app._dshStopping) {
+    app._dshStopping = true;
+    e.preventDefault();
+    stopDshServer()
+      .catch(() => {})
+      .finally(() => {
+        app.quit();
+      });
+  }
 });

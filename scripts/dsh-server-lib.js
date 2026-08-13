@@ -142,6 +142,59 @@ function spawnDshServer(port) {
   return proc;
 }
 
+// 校验某 pid 确实是 dsh 进程（防止 pid 被系统复用后误杀其他程序）。
+// ps 可用时严格校验命令行；ps 不可用（受限环境）时按 pid 文件信任（存活即视为 dsh）。
+function isDshProcess(pid) {
+  try { process.kill(pid, 0); } catch (_) { return false; } // 进程不存在
+  try {
+    const out = spawnSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
+    if (out.status === 0 && out.stdout) return /dsh/.test(out.stdout);
+    return true; // ps 不可用 → 信任 pid 文件
+  } catch (_) {
+    return true;
+  }
+}
+
+// 结束本应用拉起的 dsh web 服务（应用退出时调用）。
+// 只结束 logs/dsh-web.pid 记录的进程；复用的外部实例不受影响。
+// 返回 true 表示已结束（或本就没有自拉起的服务），false 表示进程仍存活。
+async function stopDshServer(timeoutMs = 4000) {
+  const pidFile = path.join(getLogDir(), 'dsh-web.pid');
+  let pid = null;
+  try {
+    pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
+  } catch (_) {}
+  try { fs.unlinkSync(pidFile); } catch (_) {}
+
+  if (!pid || !Number.isFinite(pid) || pid <= 0) {
+    console.log('[dsh-server] 无本应用拉起的 dsh web 记录（可能复用了外部实例），跳过停止');
+    return true;
+  }
+  if (!isDshProcess(pid)) {
+    console.log(`[dsh-server] pid ${pid} 不是 dsh 进程，跳过停止（可能已被系统回收）`);
+    return true;
+  }
+
+  console.log(`[dsh-server] 应用退出，正在结束 dsh web (pid=${pid}) ...`);
+  try { process.kill(pid, 'SIGTERM'); } catch (_) {}
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0); // 存活则继续等
+      await new Promise((r) => setTimeout(r, 200));
+    } catch (_) {
+      console.log('[dsh-server] ✅ dsh web 已结束');
+      return true;
+    }
+  }
+  try {
+    process.kill(pid, 'SIGKILL');
+    console.log('[dsh-server] dsh web 未在限时内退出，已 SIGKILL');
+  } catch (_) {}
+  return true;
+}
+
 module.exports = {
   DEFAULT_PORT,
   POLL_ATTEMPTS,
@@ -149,6 +202,7 @@ module.exports = {
   probePort,
   waitForServer,
   spawnDshServer,
+  stopDshServer,
   resolveDshBin,
   ensureDshBin,
   getLogDir,

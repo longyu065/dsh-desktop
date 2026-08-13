@@ -7,6 +7,9 @@
 
 ## [Unreleased]
 
+### Changed
+- 应用退出时结束本应用拉起的 dsh web 服务（`logs/dsh-web.pid` 精确追踪 + 进程校验，外部实例不受影响）；此前为常驻不杀。
+
 ### Added
 - Windows x64 打包支持（NSIS 安装包 + zip，`npm run dist:win`），含 DeepSeek 图标 .ico。
 - 自动安装 dsh 失败的场景下，提示手动 `npm i -g @deepseek-ai/dsh` 的指引。

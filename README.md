@@ -14,7 +14,7 @@ A desktop shell (Electron) for the [DeepSeek Harness](https://github.com/deepsee
 
 - 🚀 **Zero-config startup** — auto-locates or auto-installs `dsh` (`@deepseek-ai/dsh`); no prerequisites beyond Node.js
 - 🖥️ **Native desktop experience** — standalone window + macOS menu-bar tray (hide-to-tray on close; show/hide/quit from the tray)
-- 🔄 **Smart server management** — reuses an existing `dsh web` instance; spawns a resident server when none is running; keeps it alive after the app quits
+- 🔄 **Smart server management** — reuses an existing `dsh web` instance; spawns a server when none is running; **stops the server it started when the app quits**
 - 🐋 **Official DeepSeek icon** — app and tray icons use the official whale mark
 - 📦 **One-command packaging** — electron-builder produces `.app` / dmg / zip for macOS and an NSIS installer + zip for Windows
 
@@ -26,7 +26,7 @@ A desktop shell (Electron) for the [DeepSeek Harness](https://github.com/deepsee
 2. **No `dsh`? Auto-install** (`ensureDshBin`): runs `npm install --prefix vendor/dsh @deepseek-ai/dsh` into the project — no global install, no dependence on the user's `PATH` (first run takes ~1–2 min)
 3. **Probe `127.0.0.1:3080`** — an existing instance (started by CLI or this app) is reused; otherwise a **resident** server is spawned (`detached`, logs to `logs/`) and the app waits until the port is ready before opening the window.
 
-The Electron process is a pure client: it loads the page and owns the tray. Quitting the app does **not** kill `dsh web` — the server stays resident so the next `npm start` opens instantly. Stop it with `pkill -f "dsh web"`.
+The Electron process is a pure client: it loads the page and owns the tray. **Quitting the app stops the `dsh web` server it started** (tracked via `logs/dsh-web.pid`, with a command-line sanity check to avoid killing a reused pid). An externally started instance — e.g. one launched from a terminal — is left untouched.
 
 Running `electron .` directly (`npm run start:raw`, skipping the preflight) still triggers the same locate/install/spawn fallback from the main process.
 
