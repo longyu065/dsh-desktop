@@ -21,6 +21,13 @@
       "scripts/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "vendor/dsh",
+        "to": "vendor/dsh",
+        "filter": ["**/*"]
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
