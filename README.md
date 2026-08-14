@@ -1,14 +1,14 @@
 # dsh-desktop
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/longyu065/dsh-desktop/releases/tag/v0.1.0)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/longyu065/dsh-desktop/releases/tag/v0.2.0)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)]()
 [![Electron](https://img.shields.io/badge/Electron-43-47848F.svg)]()
 
 **English** | [中文](README.zh.md)
 
 A desktop shell (Electron) for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI (`dsh web`, served at `127.0.0.1:3080` by default).
-**Zero-config**: clone it, run `npm install && npm start` — if `dsh` isn't installed, the app installs it for you.
+**Grab-and-go**: download the packaged app, launch it — if `dsh` isn't present, it auto-installs. **No system Node.js required** (uses Electron's built-in runtime).
 
 ## Features
 

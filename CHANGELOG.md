@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- 打包 app 二次启动崩溃：用 `process.execPath`（Electron 内置 Node.js）执行 dsh，彻底绕过 system PATH 和 shebang 依赖；系统不再需要预装 Node.js。
+- 打包 app 签名损坏导致启动闪退：禁用 macOS 自动签名（`identity: null`），本地/开源分发不再依赖钥匙串证书。
+- 打包 app 退出后 3080 端口仍可访问：日志/pid 写入可写 userData 目录；`findPidsOnPort` + `isDshProcess` 确保关闭所有监听 3080 的 dsh 进程。
+
 ### Changed
 - 应用退出时结束本应用拉起的 dsh web 服务（`logs/dsh-web.pid` 精确追踪 + 进程校验，外部实例不受影响）；此前为常驻不杀。
 

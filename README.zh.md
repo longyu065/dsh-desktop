@@ -1,14 +1,14 @@
 # dsh-desktop
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/longyu065/dsh-desktop/releases/tag/v0.1.0)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/longyu065/dsh-desktop/releases/tag/v0.2.0)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)]()
 [![Electron](https://img.shields.io/badge/Electron-43-47848F.svg)]()
 
 **中文** | [English](README.md)
 
 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI（`dsh web`，本地 `127.0.0.1:3080`）包装成桌面应用（Electron 壳）。
-**开箱即用**：拿过去只要 `npm install && npm start`，无需预装 dsh——没有会自动安装。
+**拿来即用**：下载打包好的应用，双击打开——没有 dsh 会自动安装。**系统无需预装 Node.js**（使用 Electron 内置运行时）。
 
 ## 功能特性
 
