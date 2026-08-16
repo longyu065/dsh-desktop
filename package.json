@@ -1,7 +1,7 @@
 {
   "name": "dsh-desktop",
   "version": "0.2.0",
-  "description": "DeepSeek Harness Web GUI 的 Electron 桌面壳",
+  "description": "DeepSeek Harness Web GUI 的 Electron 桌面壳 — 拿来即用，免装 Node.js，双击打开",
   "main": "electron/main.js",
   "author": "tiankunrui",
   "license": "MIT",
@@ -9,9 +9,10 @@
     "start": "node scripts/ensure-dsh.js && electron .",
     "start:raw": "electron .",
     "ensure-dsh": "node scripts/ensure-dsh.js",
-    "dist": "electron-builder --mac dmg zip",
-    "dist:win": "electron-builder --win nsis zip",
-    "dist:all": "electron-builder --mac dmg zip --win nsis zip"
+    "build:prepare": "node scripts/ensure-dsh.js",
+    "dist": "npm run build:prepare && electron-builder --mac dmg zip",
+    "dist:win": "npm run build:prepare && electron-builder --win nsis zip",
+    "dist:all": "npm run build:prepare && electron-builder --mac dmg zip --win nsis zip"
   },
   "build": {
     "appId": "com.tkr.dsh-desktop",
@@ -25,7 +26,7 @@
       {
         "from": "vendor/dsh",
         "to": "vendor/dsh",
-        "filter": ["**/*"]
+        "filter": ["**/*", "!package-lock.json"]
       }
     ],
     "mac": {

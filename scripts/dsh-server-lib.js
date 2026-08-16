@@ -1,5 +1,6 @@
 'use strict';
 // dsh web 服务探测与拉起的公共逻辑，供 ensure-dsh.js 与 electron/main.js 复用。
+// 自包含桌面版 v0.2.0：vendor/dsh 完整打进 extraResources，打包后路径优先从 Resources/vendor/dsh 解析。
 const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const http = require('http');
@@ -41,7 +42,7 @@ async function waitForServer(port) {
 }
 
 // 解析 dsh 可执行文件的真实路径（不依赖调用方 PATH），找不到返回 null。
-// 查找顺序：DSH_BIN → PATH → npx 缓存 → 常见位置 → 自安装(vendor) → 预装(extraResources)。
+// 查找顺序：DSH_BIN → PATH → npx 缓存 → 常见位置 → vendor（开发）→ extraResources（打包）
 function resolveDshBin() {
   // 1) 显式指定（最高优先级）
   if (process.env.DSH_BIN) return process.env.DSH_BIN;
@@ -73,14 +74,24 @@ function resolveDshBin() {
     if (fs.existsSync(p)) return p;
   }
 
-  // 5) 自安装 vendor（自动安装目录，见 ensureDshBin）
+  // 5) 自安装 vendor（开发模式：vendor/dsh/node_modules/.bin/dsh）
   const vendorBin = getVendorBin();
   if (fs.existsSync(vendorBin)) return vendorBin;
 
   // 6) 打包 preload 的 dsh（extraResources 里的预装版）
-  //    开发模式没有 resourcesPath，跳过。
-  const extraBin = path.join(process.resourcesPath || '', 'vendor', 'dsh', 'node_modules', '.bin', 'dsh');
-  if (extraBin.startsWith('/') && fs.existsSync(extraBin)) return extraBin;
+  //    打包后 .app 的 Resources/vendor/dsh 包含完整 node_modules（npm install 的扁平化产物），
+  //    dsh 可执行文件在 Resources/vendor/dsh/node_modules/.bin/dsh。
+  //    先试 Resources/vendor/dsh/node_modules/.bin/dsh（完整 vendor 目录），
+  //    再退回到 Resources/vendor/dsh/lib/bin.js（旧版只复制 dsh 主包）。
+  const extraDir = path.join(process.resourcesPath || '', 'vendor', 'dsh');
+  if (extraDir.startsWith('/') && fs.existsSync(extraDir) && fs.statSync(extraDir).isDirectory()) {
+    // 新版：完整 vendor 目录 → node_modules/.bin/dsh
+    const binTry = path.join(extraDir, 'node_modules', '.bin', 'dsh');
+    if (fs.existsSync(binTry)) return binTry;
+    // 旧版兼容：只有 dsh 主包 → lib/bin.js
+    const jsEntry = path.join(extraDir, 'lib', 'bin.js');
+    if (fs.existsSync(jsEntry)) return jsEntry;
+  }
 
   return null;
 }
@@ -292,4 +303,5 @@ module.exports = {
   resolveNodeBin,
   buildSpawnEnv,
   getLogDir,
+  getVendorBin,
 };
